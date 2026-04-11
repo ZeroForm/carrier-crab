@@ -1,0 +1,11 @@
+info:
+  name: Get Test Request
+  type: http
+http:
+  method: GET
+  url: "https://httpbin.org/get"
+  headers:
+    - name: "Accept"
+      value: "application/json"
+    - name: "User-Agent"
+      value: "OpenCollection-RS/1.0"
