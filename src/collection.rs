@@ -19,10 +19,18 @@ pub struct HttpConfig {
     pub method: String,
     pub url: String,
     pub headers: Option<Vec<HttpHeader>>,
+    pub body: Option<HttpBody>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HttpHeader {
     pub name: String,
     pub value: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HttpBody {
+    #[serde(rename = "type")]
+    pub body_type: String,
+    pub data: Option<serde_yaml::Value>,
 }

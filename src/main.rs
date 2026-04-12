@@ -82,6 +82,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         
+        if let Some(body) = http.body {
+            match body.body_type.as_str() {
+                "json" | "xml" | "text" | "graphql" => {
+                    if let Some(serde_yaml::Value::String(s)) = body.data {
+                        let parsed_body = template::interpolate(&s, environment.as_ref()).unwrap_or_else(|err| {
+                            eprintln!("Body interpolation error: {}", err);
+                            std::process::exit(1);
+                        });
+                        req = req.body(parsed_body);
+                    }
+                }
+                "form-urlencoded" => {
+                    if let Some(serde_yaml::Value::Sequence(seq)) = body.data {
+                        let mut params = Vec::new();
+                        for item in seq {
+                            if let serde_yaml::Value::Mapping(m) = item {
+                                if let (Some(serde_yaml::Value::String(k)), Some(serde_yaml::Value::String(v))) = (
+                                    m.get(&serde_yaml::Value::String("name".to_string())),
+                                    m.get(&serde_yaml::Value::String("value".to_string()))
+                                ) {
+                                    let key = template::interpolate(k, environment.as_ref()).unwrap_or_else(|err| {
+                                        eprintln!("Form key interpolation error: {}", err);
+                                        std::process::exit(1);
+                                    });
+                                    let val = template::interpolate(v, environment.as_ref()).unwrap_or_else(|err| {
+                                        eprintln!("Form value interpolation error: {}", err);
+                                        std::process::exit(1);
+                                    });
+                                    params.push((key, val));
+                                }
+                            }
+                        }
+                        req = req.form(&params);
+                    }
+                }
+                _ => {
+                    println!("Warning: unsupported body type: {} or missing data", body.body_type);
+                }
+            }
+        }
+        
         let response = req.send().await?;
         let status = response.status();
         let text = response.text().await?;
