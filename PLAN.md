@@ -6,7 +6,7 @@ This document serves as the high-level roadmap for building a fully-featured, cr
 Our immediate goal is to build the engine without worrying about UI complexities.
 - [ ] Initialize standard Rust binary.
 - [ ] Implement the `OpenCollection` spec parser using `serde_yaml`.
-- [ ] Build a CLI to read a `.yaml` or `.bru` file and parse it.
+- [ ] Build a CLI to read a `.yaml` file and parse it.
 - [ ] Integrate `reqwest` to actually execute the API request and print the response to stdout.
 
 ## Phase 2: Interactivity & Watching
