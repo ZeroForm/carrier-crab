@@ -117,6 +117,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         req = req.form(&params);
                     }
                 }
+                "multipart-form" => {
+                    if let Some(serde_yaml::Value::Sequence(seq)) = body.data {
+                        let mut form = reqwest::multipart::Form::new();
+                        for item in seq {
+                            if let serde_yaml::Value::Mapping(m) = item {
+                                if let (Some(serde_yaml::Value::String(k)), Some(serde_yaml::Value::String(v))) = (
+                                    m.get(&serde_yaml::Value::String("name".to_string())),
+                                    m.get(&serde_yaml::Value::String("value".to_string()))
+                                ) {
+                                    let key = template::interpolate(k, environment.as_ref()).unwrap_or_else(|err| {
+                                        eprintln!("Multipart key interpolation error: {}", err);
+                                        std::process::exit(1);
+                                    });
+                                    let val = template::interpolate(v, environment.as_ref()).unwrap_or_else(|err| {
+                                        eprintln!("Multipart value interpolation error: {}", err);
+                                        std::process::exit(1);
+                                    });
+                                    
+                                    if val.starts_with("@file(") && val.ends_with(")") {
+                                        let file_path_str = &val["@file(".len() .. val.len()-1];
+                                        let resolved_path = args.file.parent().unwrap_or(std::path::Path::new("")).join(file_path_str);
+                                        
+                                        let file = tokio::fs::File::open(&resolved_path).await.unwrap_or_else(|err| {
+                                            eprintln!("Failed to open multipart file '{}': {}", resolved_path.display(), err);
+                                            std::process::exit(1);
+                                        });
+                                        
+                                        let file_name = resolved_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                                        
+                                        let stream = reqwest::Body::from(file);
+                                        let part = reqwest::multipart::Part::stream(stream).file_name(file_name);
+                                        form = form.part(key, part);
+                                    } else {
+                                        form = form.text(key, val);
+                                    }
+                                }
+                            }
+                        }
+                        req = req.multipart(form);
+                    }
+                }
                 _ => {
                     println!("Warning: unsupported body type: {} or missing data", body.body_type);
                 }
