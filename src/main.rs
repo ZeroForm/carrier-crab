@@ -135,16 +135,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         std::process::exit(1);
                                     });
                                     
-                                    if val.starts_with("@file(") && val.ends_with(")") {
-                                        let file_path_str = &val["@file(".len() .. val.len()-1];
-                                        let resolved_path = args.file.parent().unwrap_or(std::path::Path::new("")).join(file_path_str);
+                                    if let Some(file_path_str) = val.strip_prefix("@file(").and_then(|s| s.strip_suffix(")")) {
+                                        let base_dir = args.file.parent().unwrap_or(std::path::Path::new(""));
+                                        let base_dir = if base_dir.as_os_str().is_empty() {
+                                            std::path::Path::new(".")
+                                        } else {
+                                            base_dir
+                                        };
                                         
-                                        let file = tokio::fs::File::open(&resolved_path).await.unwrap_or_else(|err| {
-                                            eprintln!("Failed to open multipart file '{}': {}", resolved_path.display(), err);
+                                        let canon_base = base_dir.canonicalize().unwrap_or_else(|err| {
+                                            eprintln!("Failed to canonicalize base directory '{}': {}", base_dir.display(), err);
                                             std::process::exit(1);
                                         });
                                         
-                                        let file_name = resolved_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                                        let resolved_path = canon_base.join(file_path_str);
+                                        let canon_resolved = resolved_path.canonicalize().unwrap_or_else(|err| {
+                                            eprintln!("Failed to resolve upload path '{}': {}", resolved_path.display(), err);
+                                            std::process::exit(1);
+                                        });
+                                        
+                                        if !canon_resolved.starts_with(&canon_base) {
+                                            eprintln!("Security violation: Path traversal detected. File '{}' resolves outside of allowed directory", file_path_str);
+                                            std::process::exit(1);
+                                        }
+                                        
+                                        let file = tokio::fs::File::open(&canon_resolved).await.unwrap_or_else(|err| {
+                                            eprintln!("Failed to open multipart file '{}': {}", canon_resolved.display(), err);
+                                            std::process::exit(1);
+                                        });
+                                        
+                                        let file_name = canon_resolved.file_name().unwrap_or_default().to_string_lossy().to_string();
                                         
                                         let stream = reqwest::Body::from(file);
                                         let part = reqwest::multipart::Part::stream(stream).file_name(file_name);
