@@ -23,8 +23,27 @@ struct Args {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     
-    // Attempt to load .env file if it exists, without failing if it doesn't
-    let _ = dotenvy::dotenv();
+    // Attempt to load .env file by drilling upward from the target file
+    let mut current_dir = args.file.parent().unwrap_or(std::path::Path::new("")).to_path_buf();
+    if current_dir.as_os_str().is_empty() {
+        current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    } else {
+        current_dir = current_dir.canonicalize().unwrap_or(current_dir);
+    }
+    
+    loop {
+        let env_path = current_dir.join(".env");
+        if env_path.exists() {
+            let _ = dotenvy::from_path(&env_path);
+            println!("Loaded generic .env from: {}", env_path.display());
+            break;
+        }
+        
+        match current_dir.parent() {
+            Some(parent) => current_dir = parent.to_path_buf(),
+            None => break,
+        }
+    }
     
     let environment = args.env.as_ref().map(|env_name| {
         Environment::load_from_file(&args.file, env_name).unwrap_or_else(|err| {
